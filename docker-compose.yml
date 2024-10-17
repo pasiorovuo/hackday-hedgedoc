@@ -1,0 +1,59 @@
+
+services:
+  database:
+    image: postgres:13.4-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: default
+      HEDGEDOC_USER: ${HEDGEDOC_USER}
+      HEDGEDOC_PASSWORD: ${HEDGEDOC_PASSWORD}
+      HEDGEDOC_DB: ${HEDGEDOC_DB}
+      GHOSTWRITER_USER: ${GHOSTWRITER_USER}
+      GHOSTWRITER_PASSWORD: ${GHOSTWRITER_PASSWORD}
+      GHOSTWRITER_DB: ${GHOSTWRITER_DB}
+    volumes:
+      - './postgres_data:/var/lib/postgresql/data:rw'
+      - './database-init.sh:/docker-entrypoint-initdb.d/01-initialization.sh:ro'
+  hedgedoc:
+    image: quay.io/hedgedoc/hedgedoc:1.10.0
+    environment:
+      CMD_ALLOW_ANONYMOUS_EDITS: false
+      CMD_ALLOW_ANONYMOUS: false
+      CMD_ALLOW_EMAIL_REGISTER: false
+      CMD_ALLOW_ORIGIN: '0.0.0.0/0'
+      CMD_DB_URL: postgres://${HEDGEDOC_USER}:${HEDGEDOC_PASSWORD}@database:5432/${HEDGEDOC_DB}
+      CMD_DOMAIN: &domain_name ${DOMAIN_NAME}
+      CMD_OAUTH2_AUTHORIZATION_URL: ${ENTRA_ID_AUTHORIZATION_URL}
+      CMD_OAUTH2_CLIENT_ID: ${ENTRA_ID_OAUTH2_CLIENT_ID}
+      CMD_OAUTH2_CLIENT_SECRET: ${ENTRA_ID_OAUTH2_CLIENT_SECRET}
+      CMD_OAUTH2_PROVIDERNAME: "Microsoft Account"
+      CMD_OAUTH2_SCOPE: "openid email profile"
+      CMD_OAUTH2_TOKEN_URL: ${ENTRA_ID_TOKEN_URL}
+      CMD_OAUTH2_USER_PROFILE_DISPLAY_NAME_ATTR: "name"
+      CMD_OAUTH2_USER_PROFILE_EMAIL_ATTR: "email"
+      CMD_OAUTH2_USER_PROFILE_ID_ATTR: "sub"
+      CMD_OAUTH2_USER_PROFILE_URL: "https://graph.microsoft.com/oidc/userinfo"
+      CMD_OAUTH2_USER_PROFILE_USERNAME_ATTR: "sub"
+      CMD_PROTOCOL_USESSL: true
+      CMD_SESSION_SECRET: ${HEDGEDOC_SESSION_SECRET}
+      CMD_URL_ADDPORT: false
+      CMD_URL_PATH: hedgedoc
+    volumes:
+      - './hedgedoc_data/uploads:/hedgedoc/public/uploads:rw'
+    depends_on:
+      - database
+  nginx:
+    image: nginx:alpine
+    environment:
+      CERTBOT_DOMAINS: *domain_name
+      CERTBOT_EMAIL: &certbot_email ${CERTBOT_EMAIL}
+    volumes:
+      - './nginx.conf:/etc/nginx-default.conf:ro'
+      - './nginx-init.sh:/docker-entrypoint.d/01-initialization.sh:ro'
+      - './nginx_data/letsencrypt:/etc/letsencrypt:rw'
+    ports:
+      - '80:80'
+      - '443:443'
+    depends_on:
+      - database
